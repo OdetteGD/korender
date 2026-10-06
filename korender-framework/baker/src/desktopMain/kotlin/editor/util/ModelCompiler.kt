@@ -1,6 +1,7 @@
 package editor.util
 
 import com.zakgof.korender.ByteArrayTextureDeclaration
+import com.zakgof.korender.IndexType
 import com.zakgof.korender.KorenderException
 import com.zakgof.korender.Mesh
 import com.zakgof.korender.MeshAttribute
@@ -55,7 +56,8 @@ object ModelCompiler {
                 mesh.vertices.size,
                 mesh.indices?.size ?: 0,
                 mesh.attrBytes(),
-                mesh.indexBytes()
+                IndexType.Int, // TODO: autodetect
+                mesh.intIndexBytes()
             )
         }
         val eRenderables = entityRenderables.mapIndexed { index, pair ->
@@ -125,6 +127,7 @@ object ModelCompiler {
                         Attribute.METALLIC to metallicBytes(model.materials, matToMeshFacesWithId.value),
                         Attribute.ROUGHNESS to roughnessBytes(model.materials, matToMeshFacesWithId.value),
                     ),
+                    null,
                     null
                 )
             }
@@ -306,7 +309,7 @@ object ModelCompiler {
             attr.toKrAttribute() to bytes(nbb)
         }
 
-    private fun Mesh.indexBytes() = indices?.let {
+    private fun Mesh.intIndexBytes() = indices?.let {
         val nbb = NativeByteBuffer(indices!!.size * 4)
         indices!!.forEach { nbb.put(it) }
         bytes(nbb)

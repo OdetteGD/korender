@@ -3,6 +3,7 @@
 package com.zakgof.korender.baker.editor.state
 
 import com.zakgof.korender.ByteArrayTextureDeclaration
+import com.zakgof.korender.IndexType
 import com.zakgof.korender.KorenderException
 import com.zakgof.korender.Mesh
 import com.zakgof.korender.MeshAttribute
@@ -33,14 +34,19 @@ fun ModelInfo.toKrFileBytes(baseFile: File): ByteArray {
     val hasDefaultMaterial = allRenderables.any { it.first.material == null }
     val textureMapping = allMaterials.flatMap {
         listOfNotNull(
-            it.colorTextureResource, it.normalTextureResource, it.metallicRoughnessTextureResource, it.emissionTextureResource, it.occlusionTextureResource
+            it.colorTextureResource,
+            it.normalTextureResource,
+            it.metallicRoughnessTextureResource,
+            it.emissionTextureResource,
+            it.occlusionTextureResource
         )
     }.distinct().associateWith { it.toKrTexture(baseFile) }
 
     val materialMapping = allMaterials.distinct()
         .associateWith { it.toKtMaterial(textureMapping) }
 
-    val allMeshes = allRenderables.map { it.first.mesh } // TODO: implement hashCode/equals for all Mesh implementations
+    val allMeshes =
+        allRenderables.map { it.first.mesh } // TODO: implement hashCode/equals for all Mesh implementations
     val meshMapping = allMeshes.distinct().associateWith { it.toKrMesh() }
 
     val krMaterials = materialMapping.values.associateBy { it.id }
@@ -49,7 +55,13 @@ fun ModelInfo.toKrFileBytes(baseFile: File): ByteArray {
         textures = textureMapping.values.associateBy { it.id },
         materials = if (hasDefaultMaterial) krMaterials + mapOf("default" to KrModel.Material("default")) else krMaterials,
         meshes = meshMapping.values.associateBy { it.id },
-        renderables = allRenderables.map { it.first.toKrRenderable(it.second, meshMapping, materialMapping) }.associateBy { it.id }
+        renderables = allRenderables.map {
+            it.first.toKrRenderable(
+                it.second,
+                meshMapping,
+                materialMapping
+            )
+        }.associateBy { it.id }
     )
 
     return Cbor.encodeToByteArray(krModel)
@@ -58,7 +70,7 @@ fun ModelInfo.toKrFileBytes(baseFile: File): ByteArray {
 private fun TextureDeclaration.toKrTexture(baseFile: File): KrModel.Texture =
     when (this) {
         is ResourceTextureDeclaration -> {
-            val file = File(baseFile.parentFile,this.textureResource)
+            val file = File(baseFile.parentFile, this.textureResource)
             KrModel.Texture("file:" + file.name, file.extension, file.readBytes())
         }
 
@@ -80,37 +92,50 @@ private fun ModelInfo.Material.toKtMaterial(textureMapping: Map<TextureDeclarati
         roughness = this.roughnessFactor
     )
 
-private fun Mesh.toKrMesh(): KrModel.Mesh =
-    KrModel.Mesh(
+private fun Mesh.toKrMesh(): KrModel.Mesh {
+
+    val indexType = indexTypeByVertexCount(this.vertices.size)
+    return KrModel.Mesh(
         id = Uuid.generateV7().toString(),
         vertices = this.vertices.size,
         indices = this.indices?.size ?: 0,
         attrBytes = this.attributes
             .mapNotNull { attr -> attr.toKrAttr()?.let { attr to it } }
-            .associate { p -> p.second to this.vertices.flatMap { vertex -> vertex.getAttr(p.first).toTypedArray().toList() }.toByteArray() },
+            .associate { p ->
+                p.second to this.vertices.flatMap { vertex ->
+                    vertex.getAttr(p.first).toTypedArray().toList()
+                }.toByteArray()
+            },
+        indexType = indexType,
         indexBytes = this.indices?.let { indices ->
-            if (indices.size < 127) {
-                indices.map { it.toByte() }.toByteArray()
-            } else if (indices.size < 32767) {
-                ByteArray(indices.size * 2).also { bytes ->
-                    indices.forEachIndexed { i, v ->
-                        bytes[i * 2] = (v and 0xFF).toByte()
-                        bytes[i * 2 + 1] = ((v shr 8) and 0xFF).toByte()
+            when (indexType) {
+                IndexType.Byte -> {
+                    indices.map { it.toByte() }.toByteArray()
+                }
+
+                IndexType.Short -> {
+                    ByteArray(indices.size * 2).also { bytes ->
+                        indices.forEachIndexed { i, v ->
+                            bytes[i * 2] = (v and 0xFF).toByte()
+                            bytes[i * 2 + 1] = ((v shr 8) and 0xFF).toByte()
+                        }
                     }
                 }
-            } else {
-                ByteArray(indices.size * 4).also { bytes ->
-                    indices.forEachIndexed { i, v ->
-                        bytes[i * 4] = (v and 0xFF).toByte()
-                        bytes[i * 4 + 1] = ((v shr 8) and 0xFF).toByte()
-                        bytes[i * 4 + 2] = ((v shr 16) and 0xFF).toByte()
-                        bytes[i * 4 + 3] = ((v shr 24) and 0xFF).toByte()
+
+                IndexType.Int ->
+                    ByteArray(indices.size * 4).also { bytes ->
+                        indices.forEachIndexed { i, v ->
+                            bytes[i * 4] = (v and 0xFF).toByte()
+                            bytes[i * 4 + 1] = ((v shr 8) and 0xFF).toByte()
+                            bytes[i * 4 + 2] = ((v shr 16) and 0xFF).toByte()
+                            bytes[i * 4 + 3] = ((v shr 24) and 0xFF).toByte()
+                        }
                     }
-                }
             }
 
         }
     )
+}
 
 private fun <T> MeshAttribute<T>.toKrAttr(): KrModel.Attribute? = when (this.name) {
     "pos" -> Attribute.POS
@@ -123,11 +148,22 @@ private fun <T> MeshAttribute<T>.toKrAttr(): KrModel.Attribute? = when (this.nam
     else -> null
 }
 
-private fun ModelInfo.Renderable.toKrRenderable(mat4: Mat4, meshMapping: Map<Mesh, KrModel.Mesh>, materialMapping: Map<ModelInfo.Material, KrModel.Material>) = KrModel.Renderable(
+private fun ModelInfo.Renderable.toKrRenderable(
+    mat4: Mat4,
+    meshMapping: Map<Mesh, KrModel.Mesh>,
+    materialMapping: Map<ModelInfo.Material, KrModel.Material>
+) = KrModel.Renderable(
     id = Uuid.generateV7().toString(),
     meshId = meshMapping[this.mesh]!!.id,
     materialId = materialMapping[this.material]?.id ?: "default",
     transform = mat4.asArray()
 )
 
-private fun <T> Mesh.Vertex.getAttr(attr: MeshAttribute<T>): ByteArray = attr.toByteArray(this[attr]!!)
+private fun <T> Mesh.Vertex.getAttr(attr: MeshAttribute<T>): ByteArray =
+    attr.toByteArray(this[attr]!!)
+
+private fun indexTypeByVertexCount(count: Int): IndexType = when {
+    count <= 127 -> IndexType.Byte
+    count <= 32767 -> IndexType.Short
+    else -> IndexType.Int
+}

@@ -57,7 +57,11 @@ internal enum class InternalInstancingParameter(
     COLOR_INSTANCING(COLOR, listOf(INSTCOLOR), Defs.VERTEX_COLOR.bit),
     METALLIC_INSTANCING(METALLIC, listOf(INSTMETALLIC), Defs.VERTEX_METALLIC.bit),
     ROUGHNESS_INSTANCING(ROUGHNESS, listOf(INSTROUGHNESS), Defs.VERTEX_ROUGHNESS.bit),
-    COLOR_TEXTURE_INDEX_INSTANCING(COLORTEXINDEX, listOf(INSTCOLORTEXINDEX), Defs.VERTEX_COLORTEXINDEX.bit),
+    COLOR_TEXTURE_INDEX_INSTANCING(
+        COLORTEXINDEX,
+        listOf(INSTCOLORTEXINDEX),
+        Defs.VERTEX_COLORTEXINDEX.bit
+    ),
     ;
 }
 
@@ -79,7 +83,8 @@ internal class MeshLink(val cpuMesh: CMesh, dynamic: Boolean) : AutoCloseable {
     override fun close() = gpuMesh.close()
 
     fun updateGpu(instanceCount: Int, instanceDataOnly: Boolean) {
-        val vertexCount = if (instanceDataOnly) cpuMesh.vertexCount else cpuMesh.determineVertexCount()
+        val vertexCount =
+            if (instanceDataOnly) cpuMesh.vertexCount else cpuMesh.determineVertexCount()
         val indexCount = if (instanceDataOnly) cpuMesh.indexCount else cpuMesh.determineIndexCount()
         gpuMesh.update(
             cpuMesh.attributeBuffers.map { it.slice() },
@@ -98,7 +103,11 @@ internal class MeshLink(val cpuMesh: CMesh, dynamic: Boolean) : AutoCloseable {
 
 internal object Geometry {
 
-    fun create(meshDeclaration: MeshDeclaration, loader: Loader, nodeContext: NodeContext): MeshLink? {
+    fun create(
+        meshDeclaration: MeshDeclaration,
+        loader: Loader,
+        nodeContext: NodeContext
+    ): MeshLink? {
         val dynamic = ((meshDeclaration as? InstancedMesh)?.static == false) or
                 (meshDeclaration is InstancedBillboard)
         return createCpuMesh(meshDeclaration, loader, nodeContext.resourceLoader)?.let {
@@ -106,7 +115,10 @@ internal object Geometry {
         }
     }
 
-    fun loadCpuMesh(meshDeclaration: MeshDeclaration, appResourceLoader: ResourceLoader): Deferred<CMesh> {
+    fun loadCpuMesh(
+        meshDeclaration: MeshDeclaration,
+        appResourceLoader: ResourceLoader
+    ): Deferred<CMesh> {
         return when (meshDeclaration) {
             is ObjMesh -> CoroutineScope(Dispatchers.Default).async {
                 obj(appResourceLoader.load(meshDeclaration.objFile), -1)
@@ -116,12 +128,24 @@ internal object Geometry {
         }
     }
 
-    fun createCpuMesh(meshDeclaration: MeshDeclaration, loader: Loader, resourceLoader: ResourceLoader): CMesh? {
-        val simpleMeshDeclaration = (meshDeclaration as? InstancedMesh)?.mesh ?: (meshDeclaration as? InstancedBillboard)?.let { Billboard(it.nodeContext) } ?: meshDeclaration
+    fun createCpuMesh(
+        meshDeclaration: MeshDeclaration,
+        loader: Loader,
+        resourceLoader: ResourceLoader
+    ): CMesh? {
+        val simpleMeshDeclaration = (meshDeclaration as? InstancedMesh)?.mesh
+            ?: (meshDeclaration as? InstancedBillboard)?.let { Billboard(it.nodeContext) }
+            ?: meshDeclaration
         val count = (meshDeclaration as? Instanceable)?.count ?: -1
         val instancingAttributes = instancingAttributes(meshDeclaration)
         return when (simpleMeshDeclaration) {
-            is ObjMesh -> loader.safeBytes(simpleMeshDeclaration.objFile, resourceLoader) { obj(it, count) }
+            is ObjMesh -> loader.safeBytes(simpleMeshDeclaration.objFile, resourceLoader) {
+                obj(
+                    it,
+                    count
+                )
+            }
+
             is CustomCpuMesh -> toCMesh(simpleMeshDeclaration.mesh, count, instancingAttributes)
             is CustomMesh -> customMeshFromDeclaration(simpleMeshDeclaration, count)
             is FontMesh -> font(count)
@@ -130,37 +154,112 @@ internal object Geometry {
     }
 
     fun customMeshFromDeclaration(simpleMeshDeclaration: CustomMesh, count: Int): CMesh =
-        CMesh(simpleMeshDeclaration.vertexCount, simpleMeshDeclaration.indexCount, count, attributes = simpleMeshDeclaration.attributes.toTypedArray(), simpleMeshDeclaration.indexType, simpleMeshDeclaration.block)
+        CMesh(
+            simpleMeshDeclaration.vertexCount,
+            simpleMeshDeclaration.indexCount,
+            count,
+            attributes = simpleMeshDeclaration.attributes.toTypedArray(),
+            simpleMeshDeclaration.indexType,
+            simpleMeshDeclaration.block
+        )
 
     private fun instancingAttributes(meshDeclaration: MeshDeclaration): Array<InternalMeshAttribute<*>> =
         when (meshDeclaration) {
-            is InstancedMesh -> meshDeclaration.parameters.flatMap { it.instanceMeshAttributes }.toTypedArray()
-            is InstancedBillboard -> meshDeclaration.parameters.map { it.instanceMeshAttribute }.toTypedArray()
+            is InstancedMesh -> meshDeclaration.parameters.flatMap { it.instanceMeshAttributes }
+                .toTypedArray()
+
+            is InstancedBillboard -> meshDeclaration.parameters.map { it.instanceMeshAttribute }
+                .toTypedArray()
+
             else -> arrayOf()
         }
 
-    private fun createMeshSync(meshDeclaration: MeshDeclaration, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>): CMesh {
+    private fun createMeshSync(
+        meshDeclaration: MeshDeclaration,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ): CMesh {
         return when (meshDeclaration) {
-            is Sphere -> sphere(meshDeclaration.radius, meshDeclaration.slices, meshDeclaration.sectors, count, instancingAttributes)
+            is Sphere -> sphere(
+                meshDeclaration.radius,
+                meshDeclaration.slices,
+                meshDeclaration.sectors,
+                count,
+                instancingAttributes
+            )
+
             is Cube -> cube(meshDeclaration.halfSide, count, instancingAttributes)
             is DecalCube -> decalCube(meshDeclaration.halfSide, count, instancingAttributes)
             is ScreenQuad -> screenQuad()
             is Billboard -> billboard(count, instancingAttributes)
             is ImageQuad -> imageQuad()
-            is Quad -> quad(meshDeclaration.halfSideX, meshDeclaration.halfSideY, count, instancingAttributes)
-            is BiQuad -> biquad(meshDeclaration.halfSideX, meshDeclaration.halfSideY, count, instancingAttributes)
-            is Disk -> disk(meshDeclaration.radius, meshDeclaration.sectors, count, instancingAttributes)
-            is CylinderSide -> cylinderSide(meshDeclaration.radius, meshDeclaration.height, meshDeclaration.sectors, count, instancingAttributes)
-            is ConeTop -> coneTop(meshDeclaration.radius, meshDeclaration.height, meshDeclaration.sectors, count, instancingAttributes)
-            is HeightField -> heightField(meshDeclaration.cellsX, meshDeclaration.cellsZ, meshDeclaration.cellWidth, meshDeclaration.height, count, instancingAttributes)
+            is Quad -> quad(
+                meshDeclaration.halfSideX,
+                meshDeclaration.halfSideY,
+                count,
+                instancingAttributes
+            )
+
+            is BiQuad -> biquad(
+                meshDeclaration.halfSideX,
+                meshDeclaration.halfSideY,
+                count,
+                instancingAttributes
+            )
+
+            is Disk -> disk(
+                meshDeclaration.radius,
+                meshDeclaration.sectors,
+                count,
+                instancingAttributes
+            )
+
+            is CylinderSide -> cylinderSide(
+                meshDeclaration.radius,
+                meshDeclaration.height,
+                meshDeclaration.sectors,
+                count,
+                instancingAttributes
+            )
+
+            is ConeTop -> coneTop(
+                meshDeclaration.radius,
+                meshDeclaration.height,
+                meshDeclaration.sectors,
+                count,
+                instancingAttributes
+            )
+
+            is HeightField -> heightField(
+                meshDeclaration.cellsX,
+                meshDeclaration.cellsZ,
+                meshDeclaration.cellWidth,
+                meshDeclaration.height,
+                count,
+                instancingAttributes
+            )
+
             is CustomCpuMesh -> toCMesh(meshDeclaration.mesh, count, instancingAttributes)
-            is CustomMesh -> CMesh(meshDeclaration.vertexCount, meshDeclaration.indexCount, count, attributes = meshDeclaration.attributes.toTypedArray() + instancingAttributes, meshDeclaration.indexType, meshDeclaration.block)
+            is CustomMesh -> CMesh(
+                meshDeclaration.vertexCount,
+                meshDeclaration.indexCount,
+                count,
+                attributes = meshDeclaration.attributes.toTypedArray() + instancingAttributes,
+                meshDeclaration.indexType,
+                meshDeclaration.block
+            )
+
             is FontMesh -> font(count)
             else -> throw KorenderException("Unknown mesh type $meshDeclaration")
         }
     }
 
-    private fun quad(halfSideX: Float, halfSideY: Float, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) = CMesh(
+    private fun quad(
+        halfSideX: Float,
+        halfSideY: Float,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) = CMesh(
         4,
         6,
         count,
@@ -173,7 +272,12 @@ internal object Geometry {
         index(0, 1, 2, 0, 2, 3)
     }
 
-    private fun biquad(halfSideX: Float, halfSideY: Float, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) = CMesh(
+    private fun biquad(
+        halfSideX: Float,
+        halfSideY: Float,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) = CMesh(
         8,
         12,
         count,
@@ -192,7 +296,12 @@ internal object Geometry {
         index(0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6)
     }
 
-    private fun disk(radius: Float, sectors: Int, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) = CMesh(
+    private fun disk(
+        radius: Float,
+        sectors: Int,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) = CMesh(
         sectors * 2,
         sectors * 3,
         count,
@@ -212,7 +321,13 @@ internal object Geometry {
         }
     }
 
-    private fun coneTop(radius: Float, height: Float, sectors: Int, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) = CMesh(
+    private fun coneTop(
+        radius: Float,
+        height: Float,
+        sectors: Int,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) = CMesh(
         (sectors + 1) * 2,
         sectors * 3,
         count,
@@ -236,7 +351,13 @@ internal object Geometry {
         }
     }
 
-    private fun cylinderSide(radius: Float, height: Float, sectors: Int, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) = CMesh(
+    private fun cylinderSide(
+        radius: Float,
+        height: Float,
+        sectors: Int,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) = CMesh(
         (sectors + 1) * 2,
         sectors * 6,
         count,
@@ -260,7 +381,14 @@ internal object Geometry {
         }
     }
 
-    private fun heightField(xsize: Int, zsize: Int, cell: Float, height: (Int, Int) -> Float, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) = CMesh(
+    private fun heightField(
+        xsize: Int,
+        zsize: Int,
+        cell: Float,
+        height: (Int, Int) -> Float,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) = CMesh(
         (xsize + 1) * (zsize + 1),
         xsize * zsize * 6,
         count,
@@ -308,7 +436,18 @@ internal object Geometry {
 
     private fun obj(objFileBytes: ByteArray, count: Int): CMesh {
         val model: ObjModel = ObjLoader.load(objFileBytes)
-        return CMesh(model.vertices.size, model.indices.size, count, POS, NORMAL, TEX, MODEL0, MODEL1, MODEL2, MODEL3) {
+        return CMesh(
+            model.vertices.size,
+            model.indices.size,
+            count,
+            POS,
+            NORMAL,
+            TEX,
+            MODEL0,
+            MODEL1,
+            MODEL2,
+            MODEL3
+        ) {
             model.vertices.forEach {
                 pos(it.pos).normal(it.normal).tex(Vec2(it.tex.x, it.tex.y))
             }
@@ -318,7 +457,13 @@ internal object Geometry {
         }
     }
 
-    private fun sphere(radius: Float, slices: Int, sectors: Int, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) =
+    private fun sphere(
+        radius: Float,
+        slices: Int,
+        sectors: Int,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) =
         CMesh(
             (slices + 1) * (sectors + 1),
             slices * sectors * 6,
@@ -353,7 +498,11 @@ internal object Geometry {
             index(0, 2, 1, 0, 3, 2)
         }
 
-    private fun cube(halfSide: Float, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) =
+    private fun cube(
+        halfSide: Float,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) =
         CMesh(24, 36, count, POS, NORMAL, TEX, *instancingAttributes) {
             pos(Vec3(-halfSide, -halfSide, -halfSide)).normal((-1).x).tex(Vec2(0f, 0f))
             pos(Vec3(-halfSide, halfSide, -halfSide)).normal((-1).x).tex(Vec2(0f, 1f))
@@ -388,7 +537,11 @@ internal object Geometry {
             index(20, 22, 21, 20, 23, 22)
         }
 
-    private fun decalCube(halfSide: Float, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>) =
+    private fun decalCube(
+        halfSide: Float,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ) =
         CMesh(8, 36, count, POS, *instancingAttributes) {
             pos(Vec3(-halfSide, -halfSide, -halfSide))
             pos(Vec3(halfSide, -halfSide, -halfSide))
@@ -428,11 +581,23 @@ internal object Geometry {
             index(0, 1, 2, 0, 2, 3)
         }
 
-    private fun toCMesh(mesh: Mesh, count: Int, instancingAttributes: Array<InternalMeshAttribute<*>>): CMesh {
+    private fun toCMesh(
+        mesh: Mesh,
+        count: Int,
+        instancingAttributes: Array<InternalMeshAttribute<*>>
+    ): CMesh {
         if (mesh is CMesh) {
             return mesh
         }
-        return CMesh(mesh.vertices.size, mesh.indices?.size ?: -1, count, POS, NORMAL, TEX, *instancingAttributes) {
+        return CMesh(
+            mesh.vertices.size,
+            mesh.indices?.size ?: -1,
+            count,
+            POS,
+            NORMAL,
+            TEX,
+            *instancingAttributes
+        ) {
             mesh.vertices.forEach {
                 pos(it.pos!!).normal(it.normal!!).tex(it.tex!!)
             }
@@ -457,6 +622,12 @@ internal fun AttributeType.size() = when (this) {
     AttributeType.Short, AttributeType.SignedShort -> 2
     AttributeType.Int, AttributeType.SignedInt -> 4
     AttributeType.Float -> 4
+}
+
+internal fun autoIndexTypeByVertexCount(count: Int): IndexType = when {
+    count <= 127 -> IndexType.Byte
+    count <= 32767 -> IndexType.Short
+    else -> IndexType.Int
 }
 
 

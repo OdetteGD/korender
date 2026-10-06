@@ -1,6 +1,5 @@
 package com.zakgof.korender.impl.model.kr
 
-import com.zakgof.korender.IndexType
 import com.zakgof.korender.MeshAttribute
 import com.zakgof.korender.ModelInfo
 import com.zakgof.korender.ResourceLoader
@@ -14,6 +13,7 @@ import com.zakgof.korender.impl.engine.SceneDeclaration
 import com.zakgof.korender.impl.geometry.CustomMesh
 import com.zakgof.korender.impl.geometry.Geometry.customMeshFromDeclaration
 import com.zakgof.korender.impl.geometry.MeshAttributes
+import com.zakgof.korender.impl.geometry.autoIndexTypeByVertexCount
 import com.zakgof.korender.impl.material.InternalBaseMaterial
 import com.zakgof.korender.impl.material.InternalByteArrayTextureDeclaration
 import com.zakgof.korender.impl.model.InternalModel
@@ -99,7 +99,7 @@ internal class KrScene(declaration: ModelDeclaration) : InternalModel {
             vertexCount = mesh.vertices,
             indexCount = mesh.indices,
             attributes = attributes(mesh.attrBytes.keys).asList(),
-            indexType = IndexType.Int,
+            indexType = autoIndexTypeByVertexCount(mesh.vertices),
             nodeContext = this,
             dynamic = false
         ) {

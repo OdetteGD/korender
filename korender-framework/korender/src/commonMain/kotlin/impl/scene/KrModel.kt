@@ -1,5 +1,6 @@
 package com.zakgof.korender.impl.scene
 
+import com.zakgof.korender.IndexType
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -35,6 +36,7 @@ class KrModel(
         val vertices: Int,
         val indices: Int,
         val attrBytes: Map<Attribute, ByteArray>,
+        val indexType: IndexType?,
         val indexBytes: ByteArray?
     )
 
