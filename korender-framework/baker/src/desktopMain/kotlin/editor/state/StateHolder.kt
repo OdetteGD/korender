@@ -111,7 +111,7 @@ class StateHolder {
         }
     }
 
-    fun setGridScale(newScale: Float) = _state.update { it.copy(gridScale = newScale.coerceIn(0.1f, 10000f)) }
+    fun setGridScale(newScale: Float) = _state.update { it.copy(gridScale = newScale.coerceIn(0.01f, 10000f)) }
 
     fun setProjectionScale(newScale: Float) {
 

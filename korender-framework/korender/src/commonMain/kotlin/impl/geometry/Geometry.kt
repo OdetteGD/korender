@@ -624,11 +624,5 @@ internal fun AttributeType.size() = when (this) {
     AttributeType.Float -> 4
 }
 
-internal fun autoIndexTypeByVertexCount(count: Int): IndexType = when {
-    count <= 127 -> IndexType.Byte
-    count <= 32767 -> IndexType.Short
-    else -> IndexType.Int
-}
-
 
 

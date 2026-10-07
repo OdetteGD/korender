@@ -234,7 +234,7 @@ fun RowScope.EntityEditor(holder: StateHolder) {
                         holder.updateEntityModelScale(entityModel, scale)
                     }
                     LabeledFloatInput("depth:", 40.dp, dims.z, dimValidator) {
-                        val scaleZ = entityModel.defaultScale.y * it / dims.z
+                        val scaleZ = entityModel.defaultScale.z * it / dims.z
                         val scale = if (entityModel.keepProportions) Vec3(scaleZ, scaleZ, scaleZ) else Vec3(entityModel.defaultScale.x, entityModel.defaultScale.y, scaleZ)
                         holder.updateEntityModelScale(entityModel, scale)
                     }

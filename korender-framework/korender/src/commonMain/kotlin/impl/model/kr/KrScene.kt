@@ -13,7 +13,6 @@ import com.zakgof.korender.impl.engine.SceneDeclaration
 import com.zakgof.korender.impl.geometry.CustomMesh
 import com.zakgof.korender.impl.geometry.Geometry.customMeshFromDeclaration
 import com.zakgof.korender.impl.geometry.MeshAttributes
-import com.zakgof.korender.impl.geometry.autoIndexTypeByVertexCount
 import com.zakgof.korender.impl.material.InternalBaseMaterial
 import com.zakgof.korender.impl.material.InternalByteArrayTextureDeclaration
 import com.zakgof.korender.impl.model.InternalModel
@@ -99,7 +98,7 @@ internal class KrScene(declaration: ModelDeclaration) : InternalModel {
             vertexCount = mesh.vertices,
             indexCount = mesh.indices,
             attributes = attributes(mesh.attrBytes.keys).asList(),
-            indexType = autoIndexTypeByVertexCount(mesh.vertices),
+            indexType = mesh.indexType,
             nodeContext = this,
             dynamic = false
         ) {
@@ -140,14 +139,15 @@ private fun KrModel.modelInfo(nodeContext: NodeContext, meshes: Map<String, Cust
             nodeContext = nodeContext
         )
     }
-    val renderables = renderables.values.map { rend ->
-        InternalModelInfo.Renderable(
+    val l1nodes = renderables.values.map { rend ->
+        val r = InternalModelInfo.Renderable(
             rend.id,
             customMeshFromDeclaration(meshes[rend.meshId]!!, -1),
             materials[rend.materialId]!!.toMaterialInfo(modelInfoTextures)
         )
+        InternalModelInfo.Node("node-${rend.id}", Transform( Mat4(rend.transform)), null,listOf(r))
     }
-    val instance = InternalModelInfo.Node("kr", null, null, renderables)
+    val instance = InternalModelInfo.Node("kr", null, l1nodes, null)
     return InternalModelInfo(
         listOf(instance),
         null,

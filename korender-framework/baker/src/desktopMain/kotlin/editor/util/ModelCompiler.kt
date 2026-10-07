@@ -33,21 +33,30 @@ object ModelCompiler {
     @OptIn(ExperimentalUuidApi::class)
     suspend fun compile(model: Model): KrModel {
 
+
+        val modelInfos = model.entityInstances.values.map { it.modelId }.distinct()
+            .associateWith { KorenderCache.entityModelInfo(model.entityModels[it]!!.bytes, it) }
+
         val entityRenderables = model.entityInstances.values.flatMap { entityInstance ->
-            val entityModel = model.entityModels[entityInstance.modelId]!!
-            val modelInfo = KorenderCache.entityModelInfo(entityModel.bytes, entityModel.id)
+            val modelInfo = modelInfos[entityInstance.modelId]!!
             modelInfo.renderables(entityInstance.transform)
         }
 
         val entityMaterialToIdMap = entityRenderables.mapNotNull { it.first.material }.toSet()
             .associateWith { "em-" + Uuid.random() }
 
-        val entityTextureToIdMap = entityMaterialToIdMap.keys.mapNotNull { it.colorTextureResource }.toSet()
-            .associateWith { "et-" + Uuid.random() }
+        val entityTextureToIdMap =
+            entityMaterialToIdMap.keys.mapNotNull { it.colorTextureResource }.toSet()
+                .associateWith { "et-" + Uuid.random() }
 
         val eTextures = entityTextureToIdMap.entries.map { it.key.toKrTexture(it.value) }
-            .associateBy{ it.id }
-        val eMaterials = entityMaterialToIdMap.entries.map { it.key.toKrMaterial(it.value, entityTextureToIdMap[it.key.colorTextureResource]) }
+            .associateBy { it.id }
+        val eMaterials = entityMaterialToIdMap.entries.map {
+            it.key.toKrMaterial(
+                it.value,
+                entityTextureToIdMap[it.key.colorTextureResource]
+            )
+        }
             .associateBy { it.id }
         val eMeshes = entityRenderables.mapIndexed { index, pair ->
             val mesh = pair.first.mesh
@@ -56,7 +65,7 @@ object ModelCompiler {
                 mesh.vertices.size,
                 mesh.indices?.size ?: 0,
                 mesh.attrBytes(),
-                IndexType.Int, // TODO: autodetect
+                if (mesh.indices == null) null else IndexType.Int, // TODO: autodetect
                 mesh.intIndexBytes()
             )
         }
@@ -104,7 +113,8 @@ object ModelCompiler {
         val materials = texArrayMaterials.ifEmpty { mapOf("notex" to KrModel.Material("notex")) }
         val noTexMaterialId = materials.keys.first()
 
-        val meshFaces = model.brushes.values.flatMap { brush -> brush.faces.values.map { brush.mesh to it } }
+        val meshFaces =
+            model.brushes.values.flatMap { brush -> brush.faces.values.map { brush.mesh to it } }
 
         val meshes = meshFaces
             .groupBy({
@@ -124,8 +134,14 @@ object ModelCompiler {
                         Attribute.TEX to texBytes(faces),
                         Attribute.COLOR to colorBytes(model.materials, matToMeshFacesWithId.value),
                         Attribute.COLORTEXINDEX to colorTexIndex(matToMeshFacesWithId.value),
-                        Attribute.METALLIC to metallicBytes(model.materials, matToMeshFacesWithId.value),
-                        Attribute.ROUGHNESS to roughnessBytes(model.materials, matToMeshFacesWithId.value),
+                        Attribute.METALLIC to metallicBytes(
+                            model.materials,
+                            matToMeshFacesWithId.value
+                        ),
+                        Attribute.ROUGHNESS to roughnessBytes(
+                            model.materials,
+                            matToMeshFacesWithId.value
+                        ),
                     ),
                     null,
                     null
@@ -189,7 +205,10 @@ object ModelCompiler {
         return nbb.toByteArray()
     }
 
-    private fun colorBytes(materials: Map<String, Material>, faces: List<Pair<Pair<BrushMesh, Face>, Int>>): ByteArray {
+    private fun colorBytes(
+        materials: Map<String, Material>,
+        faces: List<Pair<Pair<BrushMesh, Face>, Int>>
+    ): ByteArray {
         val colors = faces
             .flatMap { pair -> List(pair.first.first.faces[pair.first.second]!!.size * 3) { materials[pair.first.second.materialId]!!.baseColor.toKorender() } }
         val nbb = NativeByteBuffer(colors.size * 16)
@@ -202,7 +221,10 @@ object ModelCompiler {
         return nbb.toByteArray()
     }
 
-    private fun metallicBytes(materials: Map<String, Material>, faces: List<Pair<Pair<BrushMesh, Face>, Int>>): ByteArray {
+    private fun metallicBytes(
+        materials: Map<String, Material>,
+        faces: List<Pair<Pair<BrushMesh, Face>, Int>>
+    ): ByteArray {
         val metallics = faces
             .flatMap { pair -> List(pair.first.first.faces[pair.first.second]!!.size * 3) { materials[pair.first.second.materialId]!!.metallic } }
         val nbb = NativeByteBuffer(metallics.size * 4)
@@ -212,7 +234,10 @@ object ModelCompiler {
         return nbb.toByteArray()
     }
 
-    private fun roughnessBytes(materials: Map<String, Material>, faces: List<Pair<Pair<BrushMesh, Face>, Int>>): ByteArray {
+    private fun roughnessBytes(
+        materials: Map<String, Material>,
+        faces: List<Pair<Pair<BrushMesh, Face>, Int>>
+    ): ByteArray {
         val roughness = faces
             .flatMap { pair -> List(pair.first.first.faces[pair.first.second]!!.size * 3) { materials[pair.first.second.materialId]!!.roughness } }
         val nbb = NativeByteBuffer(roughness.size * 4)
@@ -244,7 +269,12 @@ object ModelCompiler {
 
     private fun tag(material: Material): Tag {
         val img = TextureImageCache.compose(material.colorTexture!!)
-        return Tag(img.width, img.height, material.stochastic, if (material.triplanar) material.scale else null)
+        return Tag(
+            img.width,
+            img.height,
+            material.stochastic,
+            if (material.triplanar) material.scale else null
+        )
     }
 
     data class Tag(
@@ -256,18 +286,25 @@ object ModelCompiler {
 
     private fun ModelInfo.Node.renderables(transform: Transform): List<Pair<ModelInfo.Renderable, Transform>> {
         val childTransform = transform * (this.transform ?: Transform.IDENTITY)
-        return (this.renderables?.map { it to transform } ?: listOf()) +
+        return (this.renderables?.map { it to childTransform } ?: listOf()) +
                 (this.children?.flatMap { it.renderables(childTransform) } ?: listOf())
     }
 
-    private fun ModelInfo.renderables(transform: Transform) = this.instances.flatMap { it.renderables(transform) }
+    private fun ModelInfo.renderables(transform: Transform) =
+        this.instances.flatMap { it.renderables(transform) }
 
     private fun TextureDeclaration.toKrTexture(id: String): KrModel.Texture = when (this) {
         is ResourceTextureDeclaration -> {
             val file = File(this.textureResource.split("#")[1])
             KrModel.Texture(id, file.extension, file.readBytes())
         }
-        is ByteArrayTextureDeclaration -> KrModel.Texture(id, this.extension, this.fileBytesLoader())
+
+        is ByteArrayTextureDeclaration -> KrModel.Texture(
+            id,
+            this.extension,
+            this.fileBytesLoader()
+        )
+
         else -> throw KorenderException("Unsupported TextureDeclaration")
     }
 
@@ -292,12 +329,13 @@ object ModelCompiler {
         attributes.associate { attr ->
             val nbb = NativeFloatBuffer(vertices.size * attr.structSize)
             vertices.forEach {
-                when(attr.name) {
+                when (attr.name) {
                     "tex" -> {
                         val v = it[attr] as Vec2
                         nbb.put(v.x)
                         nbb.put(v.y)
                     }
+
                     "pos", "normal" -> {
                         val v = it[attr] as Vec3
                         nbb.put(v.x)

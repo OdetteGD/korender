@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -29,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
@@ -107,11 +107,23 @@ fun ProjectionView(axes: Axes, holder: StateHolder) {
                     if (event.type == PointerEventType.Press) {
                         focusRequester.requestFocus()
                         var isDrag = false
-                        val dragStart = awaitTouchSlopOrCancellation(down.id) { change, _ ->
-                            isDrag = true
-                            change.consume()
-                            mouseHandler.onDragStart(down.position, event.buttons)
-                            requestRedraw()
+                        val currentState = holder.state.value
+                        val touchSlop = currentState.projectionScale * currentState.gridScale * 0.5f
+                        var dragStart: PointerInputChange? = null
+                        while (true) {
+                            val slopEvent = awaitPointerEvent()
+                            val change = slopEvent.changes.firstOrNull { it.id == down.id } ?: continue
+                            if (!change.pressed) {
+                                break
+                            }
+                            if ((change.position - down.position).getDistance() > touchSlop) {
+                                isDrag = true
+                                change.consume()
+                                mouseHandler.onDragStart(down.position, event.buttons)
+                                requestRedraw()
+                                dragStart = change
+                                break
+                            }
                         }
                         if (isDrag && dragStart != null) {
                             drag(dragStart.id) { change ->
