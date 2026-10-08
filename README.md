@@ -93,3 +93,21 @@ Korender is BETA - APIs may change without notice.
 
 ### Further reading
 Explore the [Korender Wiki](https://zakgof.github.io/projects/korender/wiki)
+## Android APK build
+
+The fork includes the original Korender Android showcase module under `korender-framework/examples-android`.
+
+To build the installable debug APK locally:
+
+```bash
+cd korender-framework
+./gradlew :examples-android:assembleDebug
+```
+
+The APK is generated at:
+
+```
+korender-framework/examples-android/build/outputs/apk/debug/examples-android-debug.apk
+```
+
+GitHub Actions also builds this APK automatically on pushes and pull requests that change the framework, and it can be started manually from the Actions tab. The APK is uploaded as the `korender-android-debug` workflow artifact.
