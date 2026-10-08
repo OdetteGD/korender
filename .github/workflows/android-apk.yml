@@ -1,0 +1,50 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "korender-framework/**"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    paths:
+      - "korender-framework/**"
+      - ".github/workflows/android-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-apk:
+    name: Build Korender Android APK
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: korender-framework
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        run: ./gradlew :examples-android:assembleDebug --stacktrace --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: korender-android-debug
+          path: korender-framework/examples-android/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
